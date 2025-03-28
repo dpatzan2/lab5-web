@@ -1,0 +1,314 @@
+<html>
+
+<head>
+</head>
+
+<body>
+  <script type="application/javascript">
+    // Estilos globales
+    const styles = document.createElement("style");
+    styles.textContent = `
+        body {
+          background: #fff;
+          color: #000;
+          margin: 0;
+        }
+        body.dark {
+          background: #222;
+          color: #fff;
+        }
+        .chat-container {
+          width: 100vw;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          font-family: Arial, sans-serif;
+        }
+        .chat-box {
+          width: 600px;
+          height: 600px;
+          border: 1px solid #ccc;
+          border-radius: 10px;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        @media (max-width: 768px) {
+          .chat-box {
+            width: 100%;
+            height: 100%;
+          }
+        }
+        .chat-header {
+          padding: 10px;
+          background: #007bff;
+          color: #fff;
+          text-align: center;
+          font-weight: bold;
+          position: relative;
+        }
+        .theme-toggle {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          cursor: pointer;
+          border: none;
+          background: #fff;
+          border-radius: 5px;
+          color: #fff;
+        }
+        .message-container {
+          flex: 1;
+          overflow-y: auto;
+          padding: 10px;
+          background: #f8f9fa;
+        }
+        .input-container {
+          display: flex;
+          padding: 10px;
+          border-top: 1px solid #ccc;
+        }
+        .message-input {
+          flex: 1;
+          padding: 5px;
+          border: 1px solid #ccc;
+          border-radius: 5px;
+        }
+        .send-button {
+          margin-left: 5px;
+          padding: 5px 10px;
+          border: none;
+          background: #007bff;
+          color: #fff;
+          border-radius: 5px;
+          cursor: pointer;
+        }
+        .message {
+          margin-bottom: 10px;
+          padding: 8px;
+          border-radius: 10px;
+          max-width: 75%;
+          word-wrap: break-word;
+          position: relative;
+        }
+        .message.me {
+          background: #dcf8c6;
+          margin-left: auto;
+        }
+        .message.other {
+          background: #fff;
+          border: 1px solid #ddd;
+          margin-right: auto;
+        }
+        .username {
+          font-size: 12px;
+          margin-bottom: 4px;
+          font-weight: bold;
+          color: #666;
+        }
+        body.dark .username {
+          color: #ccc;
+        }
+        .username.me {
+          text-align: right;
+        }
+        .message-content {
+          color: #000;
+        }
+        
+      `;
+    document.head.appendChild(styles);
+
+    const API_URL = 'https://chat.nrywhite.lat';
+    const REFRESH_INTERVAL = 10000;
+    const CHAR_LIMIT = 140;
+
+    // Cargar la preferencia de tema y ajustar la clase del <body>
+    const savedTheme = localStorage.getItem("theme") || "light";
+    if (savedTheme === "dark") {
+      document.body.classList.add("dark");
+    }
+
+    // Contenedor principal con animación
+    const chatContainer = document.createElement('div');
+    chatContainer.classList.add('chat-container');
+    chatContainer.style.opacity = "0";
+    chatContainer.style.transform = "translateY(30px)";
+    document.body.appendChild(chatContainer);
+
+    // Animacion inicial
+    setTimeout(() => {
+      chatContainer.style.transition = "opacity 1s ease, transform 1s ease";
+      chatContainer.style.opacity = "1";
+      chatContainer.style.transform = "translateY(0)";
+    }, 100);
+
+    // Contenedor principal que contiene el chat
+    const chatBox = document.createElement('div');
+    chatBox.classList.add('chat-box');
+    chatContainer.appendChild(chatBox);
+
+    // Cabecera del chat
+    const chatHeader = document.createElement('div');
+    chatHeader.classList.add('chat-header');
+    chatHeader.innerText = 'Chat UVG';
+    chatBox.appendChild(chatHeader);
+
+    // Botón para cambiar de tema
+    const themeToggle = document.createElement('button');
+    themeToggle.classList.add('theme-toggle');
+    themeToggle.innerText = savedTheme === "dark" ? "🌞" : "🌙";
+    themeToggle.addEventListener('click', () => {
+      const currentTheme = localStorage.getItem("theme") || "light";
+      const newTheme = currentTheme === "light" ? "dark" : "light";
+      if (newTheme === "dark") {
+        document.body.classList.add("dark");
+      } else {
+        document.body.classList.remove("dark");
+      }
+      themeToggle.innerText = newTheme === "dark" ? "🌞" : "🌙";
+      localStorage.setItem("theme", newTheme);
+    });
+    chatHeader.appendChild(themeToggle);
+
+    // Contenedor de mensajes
+    const messageContainer = document.createElement('div');
+    messageContainer.classList.add('message-container');
+    chatBox.appendChild(messageContainer);
+
+    // Entrada de mensaje e input
+    const inputContainer = document.createElement('div');
+    inputContainer.classList.add('input-container');
+    chatBox.appendChild(inputContainer);
+
+    const messageInput = document.createElement('input');
+    messageInput.type = 'text';
+    messageInput.classList.add('message-input');
+    messageInput.placeholder = 'Escribe un mensaje...';
+    messageInput.maxLength = CHAR_LIMIT;
+    inputContainer.appendChild(messageInput);
+
+    const sendButton = document.createElement('button');
+    sendButton.classList.add('send-button');
+    sendButton.innerText = 'Enviar';
+    inputContainer.appendChild(sendButton);
+
+    // Detectar la tecla Enter para mandar un mensaje
+    sendButton.addEventListener('click', handleSendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') handleSendMessage();
+    });
+
+    async function sendMessage(message, username) {
+      if (!message) return;
+
+      const messageData = { message, username };
+
+      try {
+        await fetch(`${API_URL}/chats`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(messageData),
+        });
+
+        messageInput.value = '';
+      } catch (error) {
+        console.error('Error enviando mensaje:', error);
+      }
+    }
+
+    async function handleSendMessage() {
+      const message = messageInput.value.trim();
+      const username = 'dpatzan';
+
+      if (!message) return;
+
+      await sendMessage(message, username);
+      addMessageToUI(message, username);
+    }
+
+
+    async function refreshMessages() {
+      try {
+        const response = await fetch(`${API_URL}/chats`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error HTTP: ${response.status}`);
+        }
+
+        const messages = await response.json();
+        updateMessageUI(messages);
+      } catch (error) {
+        console.error('Error refrescando mensajes:', error);
+      }
+    }
+
+    function updateMessageUI(messages) {
+      const prevScroll = messageContainer.scrollTop;
+      const atBottom = messageContainer.scrollHeight - messageContainer.clientHeight <= prevScroll + 1;
+
+      messageContainer.innerHTML = '';
+      messages.forEach(({ message, username }) => addMessageToUI(message, username));
+
+      if (atBottom) {
+        messageContainer.scrollTop = messageContainer.scrollHeight;
+      }
+    }
+
+    function addMessageToUI(text, username) {
+      const messageDiv = document.createElement('div');
+      messageDiv.classList.add('message');
+      if (username === 'dpatzan') {
+        messageDiv.classList.add('me');
+      } else {
+        messageDiv.classList.add('other');
+      }
+
+      const usernameDiv = document.createElement('div');
+      usernameDiv.classList.add('username');
+      usernameDiv.innerText = username;
+      if (username === 'dpatzan') {
+        usernameDiv.classList.add('me');
+      }
+
+      const contentDiv = document.createElement('div');
+      contentDiv.classList.add('message-content');
+
+      if (text.match(/\.(jpeg|jpg|gif|png)$/i)) {
+        const img = document.createElement('img');
+        img.src = text;
+        img.style.width = '100px';
+        img.style.borderRadius = '5px';
+        contentDiv.appendChild(img);
+        contentDiv.style.textAlign = 'center';
+      } else if (text.startsWith('http')) {
+        const link = document.createElement('a');
+        link.href = text;
+        link.innerText = text;
+        link.target = '_blank';
+        contentDiv.appendChild(link);
+      } else {
+        contentDiv.innerText = text;
+      }
+
+      messageDiv.appendChild(usernameDiv);
+      messageDiv.appendChild(contentDiv);
+      messageContainer.appendChild(messageDiv);
+      messageContainer.scrollTop = messageContainer.scrollHeight;
+    }
+
+    setInterval(refreshMessages, REFRESH_INTERVAL);
+  </script>
+</body>
+
+</html>
